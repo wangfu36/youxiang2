@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>邮箱单发领用系统</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{padding:30px;max-width:550px;margin:0 auto;font-family:system-ui}
+.box{border:1px solid #ddd;padding:30px;border-radius:8px;text-align:center;margin:20px 0}
+.emailText{font-size:18px;margin-bottom:20px;color:#222}
+.useBtn{background:#007aff;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:15px}
+.manageBox{border-top:1px solid #eee;margin-top:30px;padding-top:20px}
+textarea{width:100%;height:80px;padding:8px;margin-bottom:10px}
+button{padding:7px 12px;cursor:pointer}
+.tips{color:#999;font-size:13px;margin-top:8px}
+</style>
+</head>
+<body>
+<h2 align="center">邮箱领用（每次只出1个）</h2>
+
+<div class="box">
+  <div class="emailText" id="showMail">加载中...</div>
+  <button class="useBtn" id="useBtn">使用并复制，领取下一个</button>
+  <div class="tips">领取后自动复制到剪贴板，本条作废自动弹出下一条</div>
+</div>
+
+<!--管理员入库区域，只有你用来加账号，别人也能看见输入框但不加也能用-->
+<div class="manageBox">
+  <h4>管理员批量添加邮箱(一行一个)</h4>
+  <textarea id="inputText"></textarea>
+  <button id="addBtn">添加进共享库存</button>
+  <button id="refresh">手动刷新库存</button>
+</div>
+
+<script>
+//替换成你自己Github Gist三个参数
+const GIST_RAW_URL = "https://gist.githubusercontent.com/wangfu36/2e54bfba4a49e2ebbc2c3957febc531d/raw/cca231eaef78630cc517c9de91959cf76a89e59b/maildata.json";
+const GIST_TOKEN = "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";
+const GIST_ID = "2e54bfba4a49e2ebbc2c3957febc531d";
+
+let allList = [];
+let nowIndex = 0;
+const showMail = document.getElementById("showMail");
+const useBtn = document.getElementById("useBtn");
+const inputText = document.getElementById("inputText");
+const addBtn = document.getElementById("addBtn");
+const refresh = document.getElementById("refresh");
+
+//复制剪贴
+async function copyTxt(text){
+  await navigator.clipboard.writeText(text);
+}
+
+//拉取全量库存
+async function getData(){
+  try{
+    let res = await fetch(GIST_RAW_URL);
+    allList = await res.json();
+    renderOne();
+  }catch{
+    showMail.innerText="网络错误，无法加载库存";
+  }
+}
+
+//保存全量到云端
+async function saveCloud(arr){
+  await fetch(`https://api.github.com/gists/${GIST_ID}`,{
+    method:"PATCH",
+    headers:{
+      "Authorization":`token ${GIST_TOKEN}`,
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({files:{"maildata.json":{content:JSON.stringify(arr,null,2)}}})
+  })
+}
+
+//只渲染当前第一条
+function renderOne(){
+  if(allList.length<=0){
+    showMail.innerText="所有邮箱已领取完毕，暂无库存";
+    useBtn.disabled=true;
+    return;
+  }
+  //固定取数组第0项展示
+  let currMail = allList[0];
+  showMail.innerText = currMail;
+  useBtn.disabled=false;
+}
+
+//领用删除当前、刷新下一条
+useBtn.onclick = async()=>{
+  if(allList.length===0)return;
+  let curr = allList[0];
+  await copyTxt(curr);
+  if(confirm(`【${curr}】已复制！确认消耗本条，自动加载下一个？`)){
+    //删除已使用第一条
+    allList.shift();
+    await saveCloud(allList);
+    renderOne();
+  }
+}
+
+//批量新增入库
+addBtn.onclick = async()=>{
+  let arr = inputText.value.trim().split(/\n/).filter(i=>i.trim());
+  allList = [...allList,...arr];
+  await saveCloud(allList);
+  inputText.value="";
+  renderOne();
+  alert("添加成功，库存已更新");
+}
+
+refresh.onclick = getData;
+getData();
+</script>
+</body>
+</html>
